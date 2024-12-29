@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Script 로딩 테스트</title>
+    <script>
+      // 실행 순서를 저장할 배열
+      window.executionLog = [];
+
+      // localStorage에서 이터레이션과 전체 결과 가져오기
+      let iteration = parseInt(localStorage.getItem("iteration")) || 1;
+      let allResults = JSON.parse(localStorage.getItem("allResults")) || [];
+      let isRunning = localStorage.getItem("isRunning") === "true";
+      let maxIterations =
+        parseInt(localStorage.getItem("maxIterations")) || 100;
+
+      function startTest() {
+        const inputValue = parseInt(
+          document.getElementById("iterationInput").value
+        );
+        if (inputValue > 0) {
+          // 새로운 테스트 시작 시 이전 결과 초기화
+          allResults = [];
+          iteration = 1;
+          maxIterations = inputValue;
+          isRunning = true;
+          localStorage.setItem("iteration", iteration);
+          localStorage.setItem("allResults", JSON.stringify(allResults));
+          localStorage.setItem("isRunning", "true");
+          localStorage.setItem("maxIterations", maxIterations);
+          document.getElementById("startButton").disabled = true;
+          document.getElementById("stopButton").disabled = false;
+          document.getElementById("iterationInput").disabled = true;
+          runIteration();
+        } else {
+          alert("1 이상의 숫자를 입력해주세요.");
+        }
+      }
+
+      function stopTest() {
+        isRunning = false;
+        localStorage.removeItem("isRunning");
+        localStorage.removeItem("maxIterations");
+        localStorage.removeItem("iteration");
+        localStorage.removeItem("allResults");
+        document.getElementById("startButton").disabled = false;
+        document.getElementById("stopButton").disabled = true;
+        document.getElementById("iterationInput").disabled = false;
+        console.log("테스트 중지됨");
+      }
+
+      function runIteration() {
+        if (!isRunning) return;
+
+        location.reload();
+      }
+
+      function logExecution(scriptNum, type) {
+        window.executionLog.push({
+          script: scriptNum,
+          type: type,
+        });
+
+        // 모든 스크립트가 실행되었는지 확인
+        if (window.executionLog.length === 6) {
+          saveResults();
+        }
+      }
+
+      function saveResults() {
+        if (!isRunning) return;
+
+        // 현재 이터레이션의 결과를 저장
+        allResults.push({
+          iteration: iteration,
+          log: window.executionLog,
+        });
+
+        // localStorage에 전체 결과 저장
+        localStorage.setItem("allResults", JSON.stringify(allResults));
+        localStorage.setItem("iteration", iteration);
+
+        // 결과 화면에 표시
+        showResults();
+
+        // 다음 이터레이션 준비
+        if (iteration < maxIterations && isRunning) {
+          iteration++;
+          localStorage.setItem("iteration", iteration);
+          setTimeout(() => {
+            location.reload();
+          }, 2000);
+        } else {
+          isRunning = false;
+          localStorage.removeItem("isRunning");
+          localStorage.removeItem("maxIterations");
+          localStorage.removeItem("iteration");
+          localStorage.removeItem("allResults");
+          document.getElementById("startButton").disabled = false;
+          document.getElementById("stopButton").disabled = true;
+          document.getElementById("iterationInput").disabled = true;
+          console.log("테스트 완료!");
+        }
+      }
+
+      function analyzeResults() {
+        let stats = {
+          async: {
+            ordered: 0, // 1,2,3 순서로 실행된 횟수
+            total: allResults.length,
+          },
+          defer: {
+            ordered: 0, // 4,5,6 순서로 실행된 횟수
+            total: allResults.length,
+          },
+        };
+
+        allResults.forEach((result) => {
+          // Async 스크립트 순서 확인
+          const asyncScripts = result.log
+            .filter((entry) => entry.type === "Async")
+            .map((entry) => entry.script);
+          if (JSON.stringify(asyncScripts) === "[1,2,3]") {
+            stats.async.ordered++;
+          }
+
+          // Defer 스크립트 순서 확인
+          const deferScripts = result.log
+            .filter((entry) => entry.type === "Defer")
+            .map((entry) => entry.script);
+          if (JSON.stringify(deferScripts) === "[4,5,6]") {
+            stats.defer.ordered++;
+          }
+        });
+
+        return stats;
+      }
+
+      function showResults() {
+        const results = document.getElementById("results");
+        let html = "";
+
+        // 통계 정보 표시
+        if (allResults.length > 0) {
+          const stats = analyzeResults();
+          html += "<h2>실행 통계</h2>";
+          html += `<p>
+            <strong>Async 스크립트 순서 보장률:</strong> ${(
+              (stats.async.ordered / stats.async.total) *
+              100
+            ).toFixed(2)}% (${stats.async.ordered}/${stats.async.total})<br>
+            <strong>Defer 스크립트 순서 보장률:</strong> ${(
+              (stats.defer.ordered / stats.defer.total) *
+              100
+            ).toFixed(2)}% (${stats.defer.ordered}/${stats.defer.total})
+          </p><hr>`;
+        }
+
+        // 각 이터레이션 결과 표시
+        allResults.forEach((result) => {
+          html += `<h3>이터레이션 ${result.iteration}</h3>`;
+          html += "<p>실행 순서:<br>";
+
+          // Async 스크립트 결과
+          html += "<strong>Async 스크립트:</strong><br>";
+          result.log
+            .filter((entry) => entry.type === "Async")
+            .forEach((entry) => {
+              html += `Script ${entry.script}<br>`;
+            });
+
+          // Defer 스크립트 결과
+          html += "<strong>Defer 스크립트:</strong><br>";
+          result.log
+            .filter((entry) => entry.type === "Defer")
+            .forEach((entry) => {
+              html += `Script ${entry.script}<br>`;
+            });
+
+          html += "</p><hr>";
+        });
+
+        results.innerHTML = html;
+      }
+
+      function resetTest() {
+        // 모든 상태 초기화
+        isRunning = false;
+        iteration = 1;
+        allResults = [];
+        maxIterations = 100;
+
+        // localStorage 초기화
+        localStorage.removeItem("isRunning");
+        localStorage.removeItem("maxIterations");
+        localStorage.removeItem("iteration");
+        localStorage.removeItem("allResults");
+
+        // UI 초기화
+        document.getElementById("startButton").disabled = false;
+        document.getElementById("stopButton").disabled = true;
+        document.getElementById("iterationInput").disabled = false;
+        document.getElementById("iterationInput").value = "100";
+        document.getElementById("iteration").textContent = "1";
+        document.getElementById("maxIterations").textContent = "100";
+
+        // 결과 화면 초기화
+        document.getElementById("results").innerHTML = "";
+
+        console.log("테스트 초기화 완료");
+      }
+
+      window.onload = function () {
+        if (isRunning) {
+          document.getElementById("startButton").disabled = true;
+          document.getElementById("stopButton").disabled = false;
+          document.getElementById("iterationInput").disabled = true;
+          document.getElementById("iterationInput").value = maxIterations;
+        }
+        // 현재까지의 결과 표시
+        showResults();
+      };
+    </script>
+
+    <!-- async 스크립트 -->
+    <script async src="script-1.js"></script>
+    <script async src="script-2.js"></script>
+    <script async src="script-3.js"></script>
+
+    <!-- defer 스크립트 -->
+    <script defer src="script-4.js"></script>
+    <script defer src="script-5.js"></script>
+    <script defer src="script-6.js"></script>
+  </head>
+  <body>
+    <div class="controls" style="margin: 20px 0">
+      <label>
+        반복 횟수:
+        <input
+          type="number"
+          id="iterationInput"
+          value="100"
+          min="1"
+          style="width: 100px; margin-right: 10px"
+        />
+      </label>
+      <button id="startButton" onclick="startTest()">시작</button>
+      <button id="stopButton" onclick="stopTest()" disabled>중지</button>
+      <button id="resetButton" onclick="resetTest()">초기화</button>
+    </div>
+    <h1>
+      스크립트 로딩 테스트 (이터레이션: <span id="iteration"></span>/<span
+        id="maxIterations"
+        >100</span
+      >)
+    </h1>
+    <div id="results"></div>
+    <script>
+      document.getElementById("iteration").textContent = iteration;
+      document.getElementById("maxIterations").textContent = maxIterations;
+
+      if (isRunning) {
+        document.getElementById("startButton").disabled = true;
+        document.getElementById("stopButton").disabled = false;
+        document.getElementById("iterationInput").disabled = true;
+        document.getElementById("iterationInput").value = maxIterations;
+      }
+    </script>
+  </body>
+</html>
